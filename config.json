@@ -1,0 +1,10 @@
+{
+  "version":"v0.0.1",
+  "bindAddr":"0.0.0.0",
+  "bindPort":1102,
+  "remoteAddr":"127.0.0.1",
+  "remotePort":10013,
+  "pwd": "123456",
+  "keymap":"KeyMap.json"
+
+}

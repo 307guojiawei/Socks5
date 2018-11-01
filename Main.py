@@ -1,3 +1,4 @@
+import json
 import socket
 import socketserver
 
@@ -6,7 +7,8 @@ import threading
 
 import time
 
-from utils.Worker import backwardWorker, broker
+from utils.Config import Config
+from utils.Worker import backwardWorker, broker, initCycription
 
 
 class MyServer(socketserver.BaseRequestHandler):
@@ -15,7 +17,6 @@ class MyServer(socketserver.BaseRequestHandler):
         try:
             # recv version identifier/method selection message
             request = self._recvBytesList(client, 3)
-
             # send accept methods: no auth
             payload = b'\x05\x00'
             client.sendall(payload)
@@ -24,9 +25,6 @@ class MyServer(socketserver.BaseRequestHandler):
 
             localAddr = '127.0.0.1'
             localPort = 10000
-
-            self._initWorker(client, targetAddr, targetPort, localAddr, localPort)
-
             payload = b'\x05'  # version
             payload += b'\x00'  # success
             payload += b'\x00'  # reserved
@@ -42,21 +40,27 @@ class MyServer(socketserver.BaseRequestHandler):
                 payload += bytes([localPort])
             # print(payload)
             client.sendall(payload)
-            while True:
-                time.sleep(0)
-                pass
+            self._initWorker(client, targetAddr, targetPort, localAddr, localPort)
+
         except Exception as e:
-            #print('handler err', e)
+            print('handler err', e)
             client.close()
 
     # worker thread,redirect client's request
     def _initWorker(self, client, targetAddr, targetPort, localAddr, localPort):
-        targetSocket = socket.socket()
-        targetSocket.connect((targetAddr, targetPort))
-        print('connect to ',targetAddr,targetPort,' fileno ',targetSocket.fileno())
-        #p = multiprocessing.Process(target=broker, args=(client, targetSocket))
-        p = threading.Thread(target=broker, args=(client, targetSocket))
-        p.start()
+        print('connect to ', targetAddr, targetPort)
+        target = socket.socket()
+        target.connect((Config().properties.get('remoteAddr'), Config().properties.get('remotePort')))
+        targetInfo = {
+            "targetAddr": targetAddr,
+            "targetPort": targetPort,
+            "pwd": Config().properties.get('pwd')
+        }
+        payload = json.dumps(targetInfo)
+        payload = payload.encode('utf-8')
+        target.sendall(bytes([len(payload)]))
+        target.sendall(payload)
+        broker(client, target,"Client")
 
     def _recvBytesList(self, client, count=-1):
         ret = []
@@ -102,11 +106,11 @@ class MyServer(socketserver.BaseRequestHandler):
             res = self._recvBytesList(client, 1)
             # get address number count
             addrCount = int.from_bytes(res[0], byteorder='big', signed=False)
-            #print('addrCount', addrCount)
+            # print('addrCount', addrCount)
             # recv target address
             targetAddr = self._recvBytes(client, addrCount)
             targetAddr = targetAddr.decode('utf-8')
-            #print('target addr:', targetAddr)
+            # print('target addr:', targetAddr)
         elif request[3] == b'\x04':  # ipv6
             res = self._recvBytes(client, 16)
             targetAddr = socket.inet_ntoa(res)
@@ -118,7 +122,9 @@ class MyServer(socketserver.BaseRequestHandler):
 
 
 def main():
-    server = socketserver.ThreadingTCPServer(('0.0.0.0', 1091), MyServer)
+    initCycription()
+    server = socketserver.ThreadingTCPServer((Config().properties.get('bindAddr'), Config().properties.get('bindPort')),
+                                             MyServer)
     server.serve_forever()
 
 
