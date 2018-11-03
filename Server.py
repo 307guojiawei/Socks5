@@ -19,6 +19,7 @@ class RemoteServer(socketserver.BaseRequestHandler):
             client.close()
 
     def _initWorker(self,client,targetAddr,targetPort):
+        print("connect to",targetAddr)
         target = socket.socket()
         target.connect((targetAddr, targetPort))
         broker(client,target,"Server")
